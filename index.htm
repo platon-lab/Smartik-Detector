@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartRec — Dog Detector</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: #0f0;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            transition: background 0.1s linear;
+        }
+
+        #video-container {
+            position: relative;
+            border: 4px solid #333;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
+        }
+
+        video {
+            display: block;
+            width: 100%;
+            max-width: 640px;
+            transform: scaleX(-1); /* Дзеркальне відображення */
+        }
+
+        /* Елементи інтерфейсу REC */
+        .rec-indicator {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            align-items: center;
+            color: red;
+            font-weight: bold;
+            animation: blink 1s infinite;
+        }
+
+        .dot {
+            height: 15px;
+            width: 15px;
+            background-color: red;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+
+        #status {
+            margin-top: 20px;
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* Стиль блимання при виявленні */
+        .alarm {
+            animation: strobe 0.2s infinite;
+        }
+
+        @keyframes strobe {
+            0% { background-color: #000; }
+            50% { background-color: #400; } /* Темно-червоний спалах */
+            100% { background-color: #000; }
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="video-container">
+        <div class="rec-indicator">
+            <div class="dot"></div>
+            <span>SMART REC</span>
+        </div>
+        <video id="webcam" autoplay playsinline muted></video>
+    </div>
+
+    <div id="status">Ініціалізація системи AI...</div>
+
+    <audio id="alarm-sound" src="УВАГА.mp3"></audio>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const status = document.getElementById('status');
+        const alarmSound = document.getElementById('alarm-sound');
+        let model;
+        let isAlarming = false;
+
+        // Налаштування камери
+        async function setupCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { width: 640, height: 480 },
+                audio: false
+            });
+            video.srcObject = stream;
+            return new Promise((resolve) => {
+                video.onloadedmetadata = () => resolve(video);
+            });
+        }
+
+        // Запуск детекції
+        async function detect() {
+            const predictions = await model.classify(video);
+            
+            // Ключові слова для пошуку собаки (Чихуахуа та подібні)
+            const targetBreeds = ['chihuahua', 'dog', 'puppy', 'toy terrier'];
+            
+            let dogFound = predictions.some(p => 
+                targetBreeds.some(breed => p.className.toLowerCase().includes(breed)) && p.probability > 0.4
+            );
+
+            if (dogFound && !isAlarming) {
+                startAlarm();
+            }
+
+            // Виведення логів для відладки (можна приховати)
+            if (!isAlarming) {
+                status.innerText = "Сканування: " + predictions[0].className;
+            }
+
+            requestAnimationFrame(detect);
+        }
+
+        function startAlarm() {
+            isAlarming = true;
+            status.innerText = "УВАГА! ВИЯВЛЕНО СМАРТИКА!";
+            status.style.color = "red";
+            document.body.classList.add('alarm');
+            
+            alarmSound.play();
+
+            alarmSound.onended = () => {
+                isAlarming = false;
+                document.body.classList.remove('alarm');
+                status.innerText = "Сканування...";
+                status.style.color = "#0f0";
+            };
+        }
+
+        // Основна функція запуску
+        async function main() {
+            try {
+                status.innerText = "Завантаження нейромережі...";
+                model = await mobilenet.load();
+                
+                status.innerText = "Запуск камери...";
+                await setupCamera();
+                
+                status.innerText = "СИСТЕМА АКТИВНА";
+                detect();
+            } catch (e) {
+                status.innerText = "Помилка: " + e.message;
+            }
+        }
+
+        // Потрібна взаємодія користувача для запуску звуку (політика браузерів)
+        window.addEventListener('click', () => {
+            if (!model) main();
+        }, { once: true });
+
+        alert("Натисніть OK, а потім клікніть будь-де на екрані, щоб активувати систему SmartRec!");
+    </script>
+</body>
+</html>
